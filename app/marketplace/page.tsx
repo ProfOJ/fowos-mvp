@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Star, Trophy, Award, MapPin, Clock, Filter } from "lucide-react"
+import { Search, Star, Trophy, Award, MapPin, Filter, Eye, Briefcase } from "lucide-react"
 import Link from "next/link"
+import { SKILL_CATEGORIES } from "@/lib/categories"
 
 interface TalentProfile {
   id: string
@@ -19,11 +20,15 @@ interface TalentProfile {
   experience_level: string
   hourly_rate: number
   location: string
-  total_pok_score: number
-  total_pos_score: number
+  country: string
+  pok_score: number
+  pos_score: number
   reputation_score: number
   total_reviews: number
   availability: string
+  ens_address: string
+  created_at: string
+  category: string
 }
 
 export default function MarketplacePage() {
@@ -31,9 +36,12 @@ export default function MarketplacePage() {
   const [filteredTalents, setFilteredTalents] = useState<TalentProfile[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [skillFilter, setSkillFilter] = useState("")
-  const [experienceFilter, setExperienceFilter] = useState("")
-  const [sortBy, setSortBy] = useState("reputation")
+  const [countryFilter, setCountryFilter] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("")
+  const [sortBy, setSortBy] = useState("pok_pos_combined")
+  const [dateRange, setDateRange] = useState("all")
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,38 +49,60 @@ export default function MarketplacePage() {
   )
 
   useEffect(() => {
+    checkUser()
     fetchTalents()
   }, [])
 
   useEffect(() => {
     filterAndSortTalents()
-  }, [talents, searchQuery, skillFilter, experienceFilter, sortBy])
+  }, [talents, searchQuery, skillFilter, countryFilter, categoryFilter, sortBy, dateRange])
+
+  const checkUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    setUser(user)
+  }
 
   const fetchTalents = async () => {
     try {
-      const { data, error } = await supabase
-        .from("talents")
-        .select(`
+      const { data: talentData, error: talentError } = await supabase.from("talents").select(`
           id,
+          user_id,
           bio,
           skills,
           experience_level,
           hourly_rate,
           location,
-          total_pok_score,
-          total_pos_score,
+          country,
+          pok_score,
+          pos_score,
           reputation_score,
           total_reviews,
           availability,
+          ens_address,
+          created_at,
           profiles!inner(full_name, avatar_url)
         `)
-        .order("reputation_score", { ascending: false })
 
-      if (error) throw error
+      const { data: employerData, error: employerError } = await supabase.from("employers").select(`
+          id,
+          user_id,
+          company_description,
+          company_size,
+          industry,
+          location,
+          country,
+          created_at,
+          profiles!inner(full_name, avatar_url)
+        `)
+
+      if (talentError) throw talentError
+      if (employerError) throw employerError
 
       const formattedTalents =
-        data?.map((talent) => ({
-          id: talent.id,
+        talentData?.map((talent) => ({
+          id: talent.user_id,
           full_name: talent.profiles.full_name || "Anonymous",
           avatar_url: talent.profiles.avatar_url || "",
           bio: talent.bio || "",
@@ -80,16 +110,42 @@ export default function MarketplacePage() {
           experience_level: talent.experience_level || "junior",
           hourly_rate: talent.hourly_rate || 0,
           location: talent.location || "",
-          total_pok_score: talent.total_pok_score || 0,
-          total_pos_score: talent.total_pos_score || 0,
+          country: talent.country || "",
+          pok_score: talent.pok_score || 0,
+          pos_score: talent.pos_score || 0,
           reputation_score: talent.reputation_score || 0,
           total_reviews: talent.total_reviews || 0,
           availability: talent.availability || "full-time",
+          ens_address: talent.ens_address || "",
+          created_at: talent.created_at,
+          category: talent.skills?.[0] || "General",
         })) || []
 
-      setTalents(formattedTalents)
+      const formattedEmployers =
+        employerData?.map((employer) => ({
+          id: employer.user_id,
+          full_name: employer.profiles.full_name || "Anonymous Company",
+          avatar_url: employer.profiles.avatar_url || "",
+          bio: employer.company_description || "",
+          skills: [employer.industry || "Business"],
+          experience_level: "company",
+          hourly_rate: 0,
+          location: employer.location || "",
+          country: employer.country || "",
+          pok_score: 0,
+          pos_score: 0,
+          reputation_score: 0,
+          total_reviews: 0,
+          availability: "hiring",
+          ens_address: "",
+          created_at: employer.created_at,
+          category: employer.industry || "Business",
+        })) || []
+
+      const allUsers = [...formattedTalents, ...formattedEmployers]
+      setTalents(allUsers)
     } catch (error) {
-      console.error("Error fetching talents:", error)
+      console.error("Error fetching users:", error)
     } finally {
       setLoading(false)
     }
@@ -103,22 +159,45 @@ export default function MarketplacePage() {
         talent.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
 
       const matchesSkill = !skillFilter || talent.skills.includes(skillFilter)
-      const matchesExperience = !experienceFilter || talent.experience_level === experienceFilter
+      const matchesCountry = !countryFilter || talent.country === countryFilter
+      const matchesCategory = !categoryFilter || talent.category === categoryFilter
 
-      return matchesSearch && matchesSkill && matchesExperience
+      // Date range filter
+      let matchesDate = true
+      if (dateRange !== "all") {
+        const createdDate = new Date(talent.created_at)
+        const now = new Date()
+        const daysDiff = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+
+        switch (dateRange) {
+          case "week":
+            matchesDate = daysDiff <= 7
+            break
+          case "month":
+            matchesDate = daysDiff <= 30
+            break
+          case "year":
+            matchesDate = daysDiff <= 365
+            break
+        }
+      }
+
+      return matchesSearch && matchesSkill && matchesCountry && matchesCategory && matchesDate
     })
 
-    // Sort talents
+    // Sort users
     filtered.sort((a, b) => {
       switch (sortBy) {
+        case "pok_score":
+          return b.pok_score - a.pok_score
+        case "pos_score":
+          return b.pos_score - a.pos_score
+        case "pok_pos_combined":
+          return b.pok_score + b.pos_score - (a.pok_score + a.pos_score)
         case "reputation":
           return b.reputation_score - a.reputation_score
-        case "pok_score":
-          return b.total_pok_score - a.total_pok_score
-        case "pos_score":
-          return b.total_pos_score - a.total_pos_score
-        case "hourly_rate":
-          return a.hourly_rate - b.hourly_rate
+        case "newest":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         default:
           return 0
       }
@@ -128,79 +207,108 @@ export default function MarketplacePage() {
   }
 
   const allSkills = Array.from(new Set(talents.flatMap((t) => t.skills)))
+  const allCountries = Array.from(new Set(talents.map((t) => t.country).filter(Boolean)))
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center pt-16">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading talent marketplace...</p>
+          <p className="text-slate-600">Loading marketplace...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pt-16">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-4 text-balance">Discover Verified Talent</h1>
+          <h1 className="text-4xl font-bold text-slate-900 mb-4 text-balance">FOWOS Marketplace</h1>
           <p className="text-xl text-slate-600 max-w-2xl mx-auto text-pretty">
-            Find skilled professionals with blockchain-verified credentials and proven expertise
+            Discover verified talent and companies with blockchain credentials
           </p>
         </div>
 
         {/* Filters */}
         <Card className="mb-8">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search talents..."
+                  placeholder="Search users..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
 
-              <Select value={skillFilter} onValueChange={setSkillFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by skill" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Skills</SelectItem>
-                  {allSkills.map((skill) => (
-                    <SelectItem key={skill} value={skill}>
-                      {skill}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={experienceFilter} onValueChange={setExperienceFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Experience level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Levels</SelectItem>
-                  <SelectItem value="junior">Junior</SelectItem>
-                  <SelectItem value="mid">Mid-level</SelectItem>
-                  <SelectItem value="senior">Senior</SelectItem>
-                  <SelectItem value="expert">Expert</SelectItem>
-                </SelectContent>
-              </Select>
-
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="reputation">Reputation</SelectItem>
+                  <SelectItem value="pok_pos_combined">POK + POS Score</SelectItem>
                   <SelectItem value="pok_score">POK Score</SelectItem>
                   <SelectItem value="pos_score">POS Score</SelectItem>
-                  <SelectItem value="hourly_rate">Hourly Rate</SelectItem>
+                  <SelectItem value="reputation">Reputation</SelectItem>
+                  <SelectItem value="newest">Newest</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="General">All Categories</SelectItem>
+                  {SKILL_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={countryFilter} onValueChange={setCountryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Countries</SelectItem>
+                  {allCountries.map((country) => (
+                    <SelectItem key={country} value={country}>
+                      {country}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Date range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="year">This Year</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={skillFilter} onValueChange={setSkillFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Skill" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Skills</SelectItem>
+                  {allSkills.map((skill) => (
+                    <SelectItem key={skill} value={skill}>
+                      {skill}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -218,12 +326,13 @@ export default function MarketplacePage() {
                   </div>
                   <div className="flex-1">
                     <CardTitle className="text-lg">{talent.full_name}</CardTitle>
+                    {talent.ens_address && <p className="text-sm text-blue-600 font-mono">{talent.ens_address}</p>}
                     <div className="flex items-center gap-2 text-sm text-slate-600 mt-1">
                       <MapPin className="h-3 w-3" />
-                      {talent.location || "Remote"}
+                      {talent.location || talent.country || "Remote"}
                     </div>
                     <Badge variant="outline" className="mt-2">
-                      {talent.experience_level}
+                      {talent.category}
                     </Badge>
                   </div>
                 </div>
@@ -250,12 +359,12 @@ export default function MarketplacePage() {
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="flex flex-col items-center">
                     <Trophy className="h-4 w-4 text-yellow-500 mb-1" />
-                    <span className="text-xs font-medium">{talent.total_pok_score}</span>
+                    <span className="text-xs font-medium">{talent.pok_score}</span>
                     <span className="text-xs text-slate-500">POK</span>
                   </div>
                   <div className="flex flex-col items-center">
                     <Award className="h-4 w-4 text-blue-500 mb-1" />
-                    <span className="text-xs font-medium">{talent.total_pos_score}</span>
+                    <span className="text-xs font-medium">{talent.pos_score}</span>
                     <span className="text-xs text-slate-500">POS</span>
                   </div>
                   <div className="flex flex-col items-center">
@@ -265,18 +374,27 @@ export default function MarketplacePage() {
                   </div>
                 </div>
 
-                {/* Rate and Availability */}
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-medium">${talent.hourly_rate}/hr</span>
-                  <div className="flex items-center gap-1 text-slate-600">
-                    <Clock className="h-3 w-3" />
-                    {talent.availability}
-                  </div>
+                {/* Timestamp */}
+                <div className="text-xs text-slate-500 text-center">
+                  Joined {new Date(talent.created_at).toLocaleDateString()}
                 </div>
 
-                <Link href={`/profile/${talent.id}`}>
-                  <Button className="w-full">View Profile</Button>
-                </Link>
+                <div className="flex gap-2">
+                  <Link href={`/profile/${talent.id}`} className="flex-1">
+                    <Button variant="outline" className="w-full bg-transparent">
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
+                  </Link>
+                  {user && talent.experience_level !== "company" && (
+                    <Link href={`/hire/${talent.id}`} className="flex-1">
+                      <Button className="w-full">
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        Hire
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -285,7 +403,7 @@ export default function MarketplacePage() {
         {filteredTalents.length === 0 && (
           <div className="text-center py-12">
             <Filter className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-900 mb-2">No talents found</h3>
+            <h3 className="text-lg font-medium text-slate-900 mb-2">No users found</h3>
             <p className="text-slate-600">Try adjusting your search criteria</p>
           </div>
         )}

@@ -8,11 +8,7 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
 
   const {
     data: { user },
-    error,
   } = await supabase.auth.getUser()
-  if (error || !user) {
-    redirect("/auth/login")
-  }
 
   // Get quiz data
   const { data: quiz } = await supabase.from("quizzes").select("*").eq("id", id).eq("is_active", true).single()
@@ -21,13 +17,11 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
     redirect("/quizzes")
   }
 
-  // Check if user already completed this quiz
-  const { data: existingAttempt } = await supabase
-    .from("quiz_attempts")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("quiz_id", id)
-    .single()
+  let existingAttempt = null
+  if (user) {
+    const { data } = await supabase.from("quiz_attempts").select("*").eq("user_id", user.id).eq("quiz_id", id).single()
+    existingAttempt = data
+  }
 
-  return <QuizInterface quiz={quiz} userId={user.id} existingAttempt={existingAttempt} />
+  return <QuizInterface quiz={quiz} userId={user?.id} existingAttempt={existingAttempt} />
 }

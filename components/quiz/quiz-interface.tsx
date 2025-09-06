@@ -100,35 +100,49 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
       const passed = score >= quiz.passing_score
       const pokPointsEarned = passed ? quiz.pok_points : 0
 
-      // Save attempt to database
       const { data: attempt, error } = await supabase
         .from("quiz_attempts")
-        .insert({
-          user_id: userId,
-          quiz_id: quiz.id,
-          answers: answers,
-          score: score,
-          passed: passed,
-          time_taken_minutes: Math.ceil((quiz.time_limit_minutes * 60 - timeLeft) / 60),
-          pok_points_earned: pokPointsEarned,
-        })
+        .upsert(
+          {
+            user_id: userId,
+            quiz_id: quiz.id,
+            answers: answers,
+            score: score,
+            passed: passed,
+            time_taken_minutes: Math.ceil((quiz.time_limit_minutes * 60 - timeLeft) / 60),
+            pok_points_earned: pokPointsEarned,
+            completed_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id,quiz_id",
+          },
+        )
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Quiz submission error:", error)
+        throw error
+      }
 
-      // Update talent POK score if passed
-      if (passed) {
-        await supabase.rpc("increment_pok_score", {
-          talent_id: userId,
-          points: pokPointsEarned,
-        })
+      if (passed && pokPointsEarned > 0) {
+        const { error: updateError } = await supabase
+          .from("talents")
+          .update({
+            pok_score: supabase.raw("pok_score + ?", [pokPointsEarned]),
+          })
+          .eq("user_id", userId)
+
+        if (updateError) {
+          console.error("POK score update error:", updateError)
+        }
       }
 
       setResults(attempt)
       setIsCompleted(true)
     } catch (error) {
       console.error("Error submitting quiz:", error)
+      alert("There was an error submitting your quiz. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
