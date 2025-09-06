@@ -8,8 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -17,25 +17,39 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    console.log("[v0] Login page mounted")
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log("[v0] Login attempt started")
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-        },
       })
+
+      console.log("[v0] Login response:", { data: !!data.user, error: error?.message })
+
       if (error) throw error
-      router.push("/dashboard")
+
+      const redirectTo = searchParams.get("redirectTo") || "/dashboard"
+      console.log("[v0] Redirecting to:", redirectTo)
+
+      setTimeout(() => {
+        router.push(redirectTo)
+        router.refresh()
+      }, 100)
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      console.log("[v0] Login error:", error)
+      setError(error instanceof Error ? error.message : "An error occurred during sign in")
     } finally {
       setIsLoading(false)
     }
@@ -81,7 +95,12 @@ export default function LoginPage() {
                   className="h-11"
                 />
               </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                  <p className="font-medium">Sign in failed</p>
+                  <p>{error}</p>
+                </div>
+              )}
               <Button
                 type="submit"
                 className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"

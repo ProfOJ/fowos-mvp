@@ -25,11 +25,36 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data, error } = (await Promise.race([
+      supabase.auth.getUser(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Auth timeout")), 5000)),
+    ])) as any
 
-  const publicPaths = ["/", "/marketplace", "/quizzes", "/projects", "/leaderboard", "/profile"]
+    if (error) {
+      console.log("[v0] Auth error:", error.message)
+    } else {
+      user = data?.user
+    }
+  } catch (error) {
+    console.log("[v0] Auth check failed:", error)
+    // Continue without user if auth check fails
+  }
+
+  const publicPaths = [
+    "/",
+    "/marketplace",
+    "/quizzes",
+    "/projects",
+    "/leaderboard",
+    "/profile",
+    "/about",
+    "/auth/login",
+    "/auth/signup",
+    "/auth/signup-success",
+    "/auth/error",
+  ]
 
   const isPublicPath = publicPaths.some(
     (path) => request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + "/"),
@@ -38,6 +63,7 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublicPath && !request.nextUrl.pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
+    url.searchParams.set("redirectTo", request.nextUrl.pathname)
     return NextResponse.redirect(url)
   }
 

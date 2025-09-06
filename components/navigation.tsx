@@ -27,28 +27,33 @@ export function Navigation() {
 
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        setUser(user)
 
-      if (user) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("user_type, full_name")
-          .eq("id", user.id)
-          .single()
+        if (user) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("user_type, full_name")
+            .eq("id", user.id)
+            .single()
 
-        setProfile(profileData)
+          setProfile(profileData)
+        }
+      } catch (error) {
+        console.log("[v0] Navigation auth error:", error)
+      } finally {
+        setIsLoading(false)
       }
-
-      setIsLoading(false)
     }
     getUser()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[v0] Auth state changed:", event)
       setUser(session?.user ?? null)
 
       if (session?.user) {
@@ -68,8 +73,10 @@ export function Navigation() {
   }, [supabase.auth])
 
   const handleSignOut = async () => {
+    console.log("[v0] Signing out")
     await supabase.auth.signOut()
     router.push("/")
+    router.refresh()
   }
 
   const getDashboardRoute = () => {
@@ -97,19 +104,19 @@ export function Navigation() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-gray-600 hover:text-gray-900 font-medium">
+                <Button variant="ghost" className="text-gray-600 hover:text-gray-900 font-medium h-auto p-2">
                   For Talents
                   <ChevronDown className="ml-1 h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent align="start" className="z-[60] min-w-[200px]">
                 <DropdownMenuItem asChild>
-                  <Link href="/quizzes" className="w-full">
+                  <Link href="/quizzes" className="w-full cursor-pointer">
                     Get POKs (Prove Your Knowledge)
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/projects" className="w-full">
+                  <Link href="/projects" className="w-full cursor-pointer">
                     Get POSs (Prove Your Skills)
                   </Link>
                 </DropdownMenuItem>

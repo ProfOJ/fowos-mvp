@@ -23,5 +23,9 @@ export default async function QuizPage({ params }: { params: Promise<{ id: strin
     existingAttempt = data
   }
 
-  return <QuizInterface quiz={quiz} userId={user?.id} existingAttempt={existingAttempt} />
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <QuizInterface quiz={quiz} userId={user?.id} existingAttempt={existingAttempt} />
+    </div>
+  )
 }
