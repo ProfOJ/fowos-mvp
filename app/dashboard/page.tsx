@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, Brain, Code, Star, Award, Target } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Trophy, Brain, Code, Star, Award, Target, Briefcase, Clock, CheckCircle, XCircle } from "lucide-react"
 import Link from "next/link"
 
 export default async function DashboardPage() {
@@ -19,7 +20,6 @@ export default async function DashboardPage() {
 
   // Get user profile and talent data
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-
   const { data: talent } = await supabase.from("talents").select("*").eq("user_id", user.id).single()
 
   // Get quiz attempts and project submissions
@@ -33,6 +33,12 @@ export default async function DashboardPage() {
     .from("project_submissions")
     .select("*")
     .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+
+  const { data: jobRequests } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("talent_id", user.id)
     .order("created_at", { ascending: false })
 
   const pokScore = talent?.pok_score || 0
@@ -53,9 +59,13 @@ export default async function DashboardPage() {
             <Badge variant="secondary" className="bg-blue-100 text-blue-700">
               Level {Math.floor((pokScore + posScore) / 100) + 1}
             </Badge>
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              🔗 Wallet Connected
+            </Badge>
           </div>
         </div>
 
+        {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <Card className="border-2 border-blue-200 hover:border-blue-300 transition-colors">
             <CardContent className="p-6">
@@ -68,11 +78,18 @@ export default async function DashboardPage() {
                   <p className="text-sm text-gray-600">Take skill-based quizzes and earn POK NFTs</p>
                 </div>
               </div>
-              <Link href="/quizzes" className="block mt-4">
-                <Button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
-                  Start Quiz
-                </Button>
-              </Link>
+              <div className="flex gap-2 mt-4">
+                <Link href="/quizzes" className="flex-1">
+                  <Button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+                    Browse Quizzes
+                  </Button>
+                </Link>
+                <Link href="/quizzes/generate">
+                  <Button variant="outline" size="sm">
+                    AI Generate
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
 
@@ -128,72 +145,238 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Brain className="h-5 w-5 text-blue-600" />
-                <span>Recent Quiz Attempts</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {quizAttempts?.slice(0, 5).map((attempt) => (
-                  <div key={attempt.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-medium text-gray-900">{attempt.quizzes?.title}</div>
-                      <div className="text-sm text-gray-600">{attempt.quizzes?.category}</div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={attempt.passed ? "default" : "secondary"}>{attempt.score}%</Badge>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {new Date(attempt.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                )) || <p className="text-gray-500 text-center py-4">No quiz attempts yet</p>}
-              </div>
-            </CardContent>
-          </Card>
+        <Tabs defaultValue="activity" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+            <TabsTrigger value="attempts">My Attempts</TabsTrigger>
+            <TabsTrigger value="work">My Work</TabsTrigger>
+          </TabsList>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Code className="h-5 w-5 text-indigo-600" />
-                <span>Recent Project Submissions</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {projectSubmissions?.slice(0, 5).map((submission) => (
-                  <div key={submission.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-medium text-gray-900">{submission.title}</div>
-                      <div className="text-sm text-gray-600">{submission.role}</div>
-                    </div>
-                    <div className="text-right">
-                      <Badge
-                        variant={
-                          submission.status === "approved"
-                            ? "default"
-                            : submission.status === "rejected"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                      >
-                        {submission.status}
-                      </Badge>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {new Date(submission.created_at).toLocaleDateString()}
+          <TabsContent value="activity" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Brain className="h-5 w-5 text-blue-600" />
+                    <span>Recent Quiz Attempts</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {quizAttempts?.slice(0, 5).map((attempt) => (
+                      <div key={attempt.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="font-medium text-gray-900">{attempt.quizzes?.title}</div>
+                          <div className="text-sm text-gray-600">{attempt.quizzes?.category}</div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={attempt.passed ? "default" : "secondary"}>{attempt.score}%</Badge>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(attempt.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )) || <p className="text-gray-500 text-center py-4">No quiz attempts yet</p>}
                   </div>
-                )) || <p className="text-gray-500 text-center py-4">No project submissions yet</p>}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Code className="h-5 w-5 text-indigo-600" />
+                    <span>Recent Project Submissions</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {projectSubmissions?.slice(0, 5).map((submission) => (
+                      <div key={submission.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="font-medium text-gray-900">{submission.title}</div>
+                          <div className="text-sm text-gray-600">{submission.role}</div>
+                        </div>
+                        <div className="text-right">
+                          <Badge
+                            variant={
+                              submission.status === "approved"
+                                ? "default"
+                                : submission.status === "rejected"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {submission.status}
+                          </Badge>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(submission.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    )) || <p className="text-gray-500 text-center py-4">No project submissions yet</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="attempts" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Quiz Attempts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {quizAttempts?.map((attempt) => (
+                      <div key={attempt.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{attempt.quizzes?.title}</div>
+                          <div className="text-sm text-gray-600">{attempt.quizzes?.category}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(attempt.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge variant={attempt.passed ? "default" : "secondary"}>{attempt.score}%</Badge>
+                          {!attempt.passed && (
+                            <Link href={`/quizzes/${attempt.quiz_id}`}>
+                              <Button size="sm" variant="outline">
+                                Retake
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )) || <p className="text-gray-500 text-center py-8">No quiz attempts yet</p>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Project Submissions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {projectSubmissions?.map((submission) => (
+                      <div key={submission.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{submission.title}</div>
+                          <div className="text-sm text-gray-600">{submission.role}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(submission.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge
+                            variant={
+                              submission.status === "approved"
+                                ? "default"
+                                : submission.status === "rejected"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {submission.status}
+                          </Badge>
+                          {submission.status === "rejected" && (
+                            <Link href="/projects/submit">
+                              <Button size="sm" variant="outline">
+                                Resubmit
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )) || <p className="text-gray-500 text-center py-8">No project submissions yet</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="work" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Briefcase className="h-5 w-5 text-purple-600" />
+                    <span>Job Requests</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {jobRequests
+                      ?.filter((job) => job.status === "pending")
+                      .map((job) => (
+                        <div key={job.id} className="p-4 border rounded-lg">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <div className="font-medium text-gray-900">{job.title}</div>
+                              <div className="text-sm text-gray-600">{job.company_name}</div>
+                              <div className="text-sm text-green-600 font-medium">${job.rate}/hour</div>
+                            </div>
+                            <Badge variant="secondary">{job.engagement_type}</Badge>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Accept
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Decline
+                            </Button>
+                            <Button size="sm" variant="ghost">
+                              View Details
+                            </Button>
+                          </div>
+                        </div>
+                      )) || <p className="text-gray-500 text-center py-4">No pending job requests</p>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Clock className="h-5 w-5 text-blue-600" />
+                    <span>Active Jobs</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {jobRequests
+                      ?.filter((job) => job.status === "active")
+                      .map((job) => (
+                        <div key={job.id} className="p-4 border rounded-lg">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <div className="font-medium text-gray-900">{job.title}</div>
+                              <div className="text-sm text-gray-600">{job.company_name}</div>
+                              <div className="text-sm text-green-600 font-medium">
+                                ${job.rate}/hour • {job.hours_per_week}h/week
+                              </div>
+                            </div>
+                            <Badge>{job.engagement_type}</Badge>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                              Complete & Review
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )) || <p className="text-gray-500 text-center py-4">No active jobs</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

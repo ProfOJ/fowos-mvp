@@ -82,6 +82,8 @@ export const SKILL_CATEGORIES = [
 
 export type SkillCategory = (typeof SKILL_CATEGORIES)[number]
 
+export const categories = SKILL_CATEGORIES
+
 export const COUNTRIES = [
   "United States",
   "Canada",
