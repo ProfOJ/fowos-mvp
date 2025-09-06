@@ -1,10 +1,12 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { createBrowserClient } from "@supabase/ssr"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
 
 interface UserProfile {
@@ -92,12 +94,28 @@ export function Navigation() {
             <Link href="/marketplace" className="text-gray-600 hover:text-gray-900 font-medium">
               Marketplace
             </Link>
-            <Link href="/quizzes" className="text-gray-600 hover:text-gray-900 font-medium">
-              POK Quizzes
-            </Link>
-            <Link href="/projects" className="text-gray-600 hover:text-gray-900 font-medium">
-              POS Projects
-            </Link>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-gray-600 hover:text-gray-900 font-medium">
+                  For Talents
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem asChild>
+                  <Link href="/quizzes" className="w-full">
+                    Get POKs (Prove Your Knowledge)
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/projects" className="w-full">
+                    Get POSs (Prove Your Skills)
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Link href="/about" className="text-gray-600 hover:text-gray-900 font-medium">
               About
             </Link>

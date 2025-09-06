@@ -86,7 +86,7 @@ export default async function DashboardPage() {
                 </Link>
                 <Link href="/quizzes/generate">
                   <Button variant="outline" size="sm">
-                    AI Generate
+                    Generate
                   </Button>
                 </Link>
               </div>

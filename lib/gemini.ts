@@ -22,6 +22,10 @@ export async function generateQuizQuestions({
   experienceLevel,
   category,
 }: GenerateQuizParams): Promise<QuizQuestion[]> {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured")
+  }
+
   const model = genAI.getGenerativeModel({ model: "gemini-pro" })
 
   const prompt = `
@@ -45,7 +49,7 @@ Format your response as a JSON array with this exact structure:
   }
 ]
 
-Make sure the JSON is valid and contains exactly 10 questions.
+Make sure the JSON is valid and contains exactly 10 questions. Do not include any markdown formatting or code blocks, just return the raw JSON array.
 `
 
   try {
@@ -53,9 +57,15 @@ Make sure the JSON is valid and contains exactly 10 questions.
     const response = await result.response
     const text = response.text()
 
-    // Extract JSON from the response
-    const jsonMatch = text.match(/\[[\s\S]*\]/)
+    let cleanText = text.trim()
+
+    // Remove markdown code blocks if present
+    cleanText = cleanText.replace(/```json\s*/, "").replace(/```\s*$/, "")
+
+    // Find JSON array in the response
+    const jsonMatch = cleanText.match(/\[[\s\S]*\]/)
     if (!jsonMatch) {
+      console.error("No JSON array found in response:", text)
       throw new Error("No valid JSON found in response")
     }
 
@@ -63,7 +73,7 @@ Make sure the JSON is valid and contains exactly 10 questions.
 
     // Validate the response
     if (!Array.isArray(questions) || questions.length !== 10) {
-      throw new Error("Invalid response format or incorrect number of questions")
+      throw new Error(`Invalid response format or incorrect number of questions. Got ${questions.length} questions`)
     }
 
     // Validate each question
@@ -73,15 +83,20 @@ Make sure the JSON is valid and contains exactly 10 questions.
         !Array.isArray(q.options) ||
         q.options.length !== 4 ||
         typeof q.correct_answer !== "number" ||
+        q.correct_answer < 0 ||
+        q.correct_answer > 3 ||
         !q.explanation
       ) {
-        throw new Error(`Invalid question format at index ${index}`)
+        throw new Error(`Invalid question format at index ${index}: ${JSON.stringify(q)}`)
       }
     })
 
     return questions
   } catch (error) {
     console.error("Error generating quiz questions:", error)
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate quiz questions: ${error.message}`)
+    }
     throw new Error("Failed to generate quiz questions")
   }
 }

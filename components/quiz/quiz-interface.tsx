@@ -38,6 +38,8 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
   const [isCompleted, setIsCompleted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [results, setResults] = useState<any>(null)
+  const [isTabActive, setIsTabActive] = useState(true)
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
 
   const router = useRouter()
   const supabase = createClient()
@@ -69,6 +71,61 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
     }
   }, [existingAttempt])
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isStarted && !isCompleted) {
+        setIsTabActive(false)
+        setTabSwitchCount((prev) => prev + 1)
+
+        if (tabSwitchCount >= 2) {
+          alert("Quiz cancelled due to multiple tab switches. This is to ensure quiz integrity.")
+          router.push("/quizzes")
+          return
+        }
+
+        alert(`Warning: Tab switching detected (${tabSwitchCount + 1}/3). Quiz will be cancelled after 3 switches.`)
+      } else {
+        setIsTabActive(true)
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [isStarted, isCompleted, tabSwitchCount, router])
+
+  useEffect(() => {
+    if (!isStarted || isCompleted) return
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+      return false
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+S, etc.
+      if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && e.key === "I") ||
+        (e.ctrlKey && e.key === "u") ||
+        (e.ctrlKey && e.key === "s") ||
+        (e.ctrlKey && e.key === "a") ||
+        (e.ctrlKey && e.key === "c") ||
+        (e.ctrlKey && e.key === "v")
+      ) {
+        e.preventDefault()
+        return false
+      }
+    }
+
+    document.addEventListener("contextmenu", handleContextMenu)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isStarted, isCompleted])
+
   const startQuiz = () => {
     setIsStarted(true)
   }
@@ -96,7 +153,7 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
       // Calculate score
       let correctAnswers = 0
       quiz.questions.forEach((question, index) => {
-        if (answers[index] === question.correct_answer) {
+        if (Number.parseInt(answers[index]) === question.correct_answer) {
           correctAnswers++
         }
       })
@@ -104,6 +161,8 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
       const score = Math.round((correctAnswers / quiz.questions.length) * 100)
       const passed = score >= quiz.passing_score
       const pokPointsEarned = passed ? quiz.pok_points : 0
+
+      console.log("[v0] Quiz submission:", { correctAnswers, score, passed, pokPointsEarned })
 
       // Save to Supabase first
       const { data: attempt, error } = await supabase
@@ -118,6 +177,7 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
             time_taken_minutes: Math.ceil((quiz.time_limit_minutes * 60 - timeLeft) / 60),
             pok_points_earned: pokPointsEarned,
             completed_at: new Date().toISOString(),
+            tab_switches: tabSwitchCount,
           },
           {
             onConflict: "user_id,quiz_id",
@@ -127,9 +187,11 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
         .single()
 
       if (error) {
-        console.error("Quiz submission error:", error)
+        console.error("[v0] Quiz submission error:", error)
         throw error
       }
+
+      console.log("[v0] Quiz attempt saved:", attempt)
 
       // Write POK to Story Protocol if passed
       if (passed) {
@@ -167,7 +229,7 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
       setResults(attempt)
       setIsCompleted(true)
     } catch (error) {
-      console.error("Error submitting quiz:", error)
+      console.error("[v0] Error submitting quiz:", error)
       alert("There was an error submitting your quiz. Please try again.")
     } finally {
       setIsSubmitting(false)
@@ -250,7 +312,17 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
   const answeredQuestions = Object.keys(answers).length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4" style={{ userSelect: "none" }}>
+      {!isTabActive && isStarted && !isCompleted && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg text-center">
+            <h2 className="text-xl font-bold text-red-600 mb-4">Quiz Paused</h2>
+            <p className="text-gray-700">Please return to the quiz tab to continue.</p>
+            <p className="text-sm text-gray-500 mt-2">Tab switches: {tabSwitchCount}/3</p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
