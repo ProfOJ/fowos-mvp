@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { DUMMY_QUIZ_QUESTIONS } from "./dummy-questions"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -23,7 +24,8 @@ export async function generateQuizQuestions({
   category,
 }: GenerateQuizParams): Promise<QuizQuestion[]> {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured")
+    console.warn("[v0] GEMINI_API_KEY not configured, using dummy questions")
+    return DUMMY_QUIZ_QUESTIONS
   }
 
   const model = genAI.getGenerativeModel({ model: "gemini-pro" })
@@ -53,9 +55,13 @@ Make sure the JSON is valid and contains exactly 10 questions. Do not include an
 `
 
   try {
+    console.log("[v0] Generating quiz with Gemini API...")
+
     const result = await model.generateContent(prompt)
     const response = await result.response
     const text = response.text()
+
+    console.log("[v0] Gemini response received, length:", text.length)
 
     let cleanText = text.trim()
 
@@ -65,19 +71,23 @@ Make sure the JSON is valid and contains exactly 10 questions. Do not include an
     // Find JSON array in the response
     const jsonMatch = cleanText.match(/\[[\s\S]*\]/)
     if (!jsonMatch) {
-      console.error("No JSON array found in response:", text)
-      throw new Error("No valid JSON found in response")
+      console.error("[v0] No JSON array found in Gemini response:", text)
+      console.warn("[v0] Falling back to dummy questions")
+      return DUMMY_QUIZ_QUESTIONS
     }
 
     const questions = JSON.parse(jsonMatch[0])
 
     // Validate the response
     if (!Array.isArray(questions) || questions.length !== 10) {
-      throw new Error(`Invalid response format or incorrect number of questions. Got ${questions.length} questions`)
+      console.error(`[v0] Invalid response format. Got ${questions.length} questions, expected 10`)
+      console.warn("[v0] Falling back to dummy questions")
+      return DUMMY_QUIZ_QUESTIONS
     }
 
     // Validate each question
-    questions.forEach((q, index) => {
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i]
       if (
         !q.question ||
         !Array.isArray(q.options) ||
@@ -87,16 +97,17 @@ Make sure the JSON is valid and contains exactly 10 questions. Do not include an
         q.correct_answer > 3 ||
         !q.explanation
       ) {
-        throw new Error(`Invalid question format at index ${index}: ${JSON.stringify(q)}`)
+        console.error(`[v0] Invalid question format at index ${i}:`, q)
+        console.warn("[v0] Falling back to dummy questions")
+        return DUMMY_QUIZ_QUESTIONS
       }
-    })
+    }
 
+    console.log("[v0] Successfully generated", questions.length, "questions with Gemini")
     return questions
   } catch (error) {
-    console.error("Error generating quiz questions:", error)
-    if (error instanceof Error) {
-      throw new Error(`Failed to generate quiz questions: ${error.message}`)
-    }
-    throw new Error("Failed to generate quiz questions")
+    console.error("[v0] Error generating quiz questions with Gemini:", error)
+    console.warn("[v0] Falling back to dummy questions")
+    return DUMMY_QUIZ_QUESTIONS
   }
 }
