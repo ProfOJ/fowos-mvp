@@ -59,7 +59,7 @@ export default function GenerateQuizPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-purple-500" />
-              Generate AI Quiz
+              Generate Quiz
             </CardTitle>
             <CardDescription>Create a personalized quiz using AI based on your topic and skill level</CardDescription>
           </CardHeader>
@@ -133,12 +133,12 @@ export default function GenerateQuizPage() {
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating Quiz...
+                  Generating...
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Quiz
+                  Generate
                 </>
               )}
             </Button>

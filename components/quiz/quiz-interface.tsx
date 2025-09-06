@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { StoryProtocolManager } from "@/lib/story"
+import { QuizContract } from "@/lib/quizContract"
+import { WalletManager } from "@/lib/web3/wallet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -38,6 +41,8 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
 
   const router = useRouter()
   const supabase = createClient()
+  const storyProtocol = StoryProtocolManager.getInstance()
+  const walletManager = WalletManager.getInstance()
 
   // Timer effect
   useEffect(() => {
@@ -100,6 +105,7 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
       const passed = score >= quiz.passing_score
       const pokPointsEarned = passed ? quiz.pok_points : 0
 
+      // Save to Supabase first
       const { data: attempt, error } = await supabase
         .from("quiz_attempts")
         .upsert(
@@ -125,7 +131,27 @@ export function QuizInterface({ quiz, userId, existingAttempt }: QuizInterfacePr
         throw error
       }
 
-      if (passed && pokPointsEarned > 0) {
+      // Write POK to Story Protocol if passed
+      if (passed) {
+        try {
+          const txHash = await storyProtocol.writePOK(userId, quiz.id, score)
+          console.log("POK written to Story Protocol:", txHash)
+
+          // Also record on smart contract if wallet is connected
+          const walletAddress = walletManager.getWalletAddress()
+          const provider = walletManager.getProvider()
+
+          if (walletAddress && provider) {
+            const quizContract = new QuizContract()
+            await quizContract.initialize(provider)
+            await quizContract.recordAttempt(quiz.id, quiz.category, score)
+          }
+        } catch (blockchainError) {
+          console.error("Blockchain recording failed:", blockchainError)
+          // Continue even if blockchain fails
+        }
+
+        // Update POK score in talents table
         const { error: updateError } = await supabase
           .from("talents")
           .update({
