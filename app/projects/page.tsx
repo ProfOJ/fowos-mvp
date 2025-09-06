@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { Navigation } from "@/components/navigation"
 import { ProjectCard } from "@/components/project/project-card"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Trophy, Code, Clock, Users } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Trophy, Code, Clock, Users, Search, Filter, Plus } from "lucide-react"
+import { SKILL_CATEGORIES } from "@/lib/categories"
+import Link from "next/link"
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -40,19 +43,37 @@ export default async function ProjectsPage() {
     ) || {}
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50">
-      <Navigation />
-
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 pt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trophy className="h-8 w-8 text-indigo-600" />
-            <h1 className="text-3xl font-bold text-gray-900">POS Projects</h1>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <Trophy className="h-8 w-8 text-indigo-600" />
+              <h1 className="text-3xl font-bold text-gray-900">POS Projects</h1>
+            </div>
+            <p className="text-lg text-gray-600">
+              Prove your skills through real-world projects. Complete challenges and earn verified POS NFT credentials.
+            </p>
           </div>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Prove your skills through real-world projects. Complete challenges and earn verified POS NFT credentials.
-          </p>
+          <Link href="/projects/submit">
+            <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Submit Project
+            </Button>
+          </Link>
+        </div>
+
+        {/* Search and Filter */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input placeholder="Search projects by title, description, or skills..." className="pl-10" />
+          </div>
+          <Button variant="outline" className="flex items-center gap-2 bg-transparent">
+            <Filter className="h-4 w-4" />
+            Filter
+          </Button>
         </div>
 
         {/* Stats */}
@@ -95,7 +116,7 @@ export default async function ProjectsPage() {
         <div className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Browse by Category</h2>
           <div className="flex flex-wrap gap-2">
-            {["All", "Frontend", "Backend", "Fullstack", "Mobile", "Design", "DevOps", "Blockchain"].map((category) => (
+            {["All", ...SKILL_CATEGORIES.slice(0, 15)].map((category) => (
               <Badge
                 key={category}
                 variant={category === "All" ? "default" : "secondary"}
